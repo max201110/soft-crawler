@@ -1,4 +1,4 @@
-"""爬虫引擎 — 支持 GitHub / 通用网页"""
+"""爬虫引擎 — 支持 GitHub / PyPI / NPM / 通用网页"""
 
 from __future__ import annotations
 
@@ -17,20 +17,33 @@ class CrawlError(Exception):
     pass
 
 
-def _fetch(url: str, timeout: int = 15) -> str:
-    """发送 HTTP GET 请求，返回响应文本"""
+def _fetch(url: str, timeout: int = 15, max_bytes: int | None = None) -> str:
+    """发送 HTTP GET 请求，返回响应文本
+
+    max_bytes: 最大读取字节数（默认 None=全量）。通用网页只用取前几十 KB
+    就能拿到 <head> 中的 meta 信息，不需要下载整个页面。
+    """
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-    req = urllib.request.Request(url, method="GET", headers={
+    headers = {
         "User-Agent": "Mozilla/5.0 (compatible; soft-crawler/0.1)",
         "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-    })
+    }
+    if max_bytes:
+        headers["Range"] = f"bytes=0-{max_bytes - 1}"
+    req = urllib.request.Request(url, method="GET", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
             charset = resp.headers.get_content_charset() or "utf-8"
-            return resp.read().decode(charset, errors="replace")
+            data = resp.read(max_bytes) if max_bytes else resp.read()
+            return data.decode(charset, errors="replace")
     except urllib.error.HTTPError as e:
+        # 206 Partial Content 是 Range 请求的正常响应
+        if e.code == 206:
+            charset = e.headers.get_content_charset() or "utf-8"
+            data = e.read(max_bytes) if max_bytes else e.read()
+            return data.decode(charset, errors="replace")
         raise CrawlError(f"HTTP {e.code}: {e.reason}") from e
     except Exception as e:
         raise CrawlError(f"请求失败: {e}") from e
@@ -50,8 +63,6 @@ def _detect_type(url: str) -> str:
 # ---- GitHub ----
 
 def _crawl_github(url: str) -> SoftwareInfo:
-    # 尝试用 GitHub API（公开仓库不需要 token）
-    # URL 格式: https://github.com/owner/repo
     match = re.match(r"https?://github\.com/([^/]+)/([^/]+)/?", url)
     if not match:
         raise CrawlError("无法解析 GitHub 仓库地址")
@@ -61,10 +72,9 @@ def _crawl_github(url: str) -> SoftwareInfo:
     api_url = f"https://api.github.com/repos/{owner}/{repo}"
 
     try:
-        raw = _fetch(api_url)
+        raw = _fetch(api_url, timeout=10)
         data = json.loads(raw)
     except CrawlError:
-        # API 失败，退回到 HTML 抓取
         return _crawl_github_html(url)
 
     if "message" in data and data.get("message") != "":
@@ -89,26 +99,22 @@ def _crawl_github(url: str) -> SoftwareInfo:
 
 def _crawl_github_html(url: str) -> SoftwareInfo:
     """从 GitHub 页面 HTML 提取信息（API 不可用时备用）"""
-    html_text = _fetch(url)
+    html_text = _fetch(url, timeout=10, max_bytes=8192)
     info = SoftwareInfo(source_url=url, source_type="github")
 
-    # 仓库名
     m = re.search(r'<title>([^<]+)</title>', html_text)
     if m:
         title = m.group(1).replace("GitHub", "").strip(" ·:-")
         info.name = title
 
-    # 描述
     m = re.search(r'<p[^>]*class="[^"]*f4[^"]*"[^>]*>(.*?)</p>', html_text, re.DOTALL)
     if m:
         info.description = re.sub(r"<[^>]+>", "", m.group(1)).strip()
 
-    # 语言
     m = re.search(r'<span[^>]* itemprop="programmingLanguage">([^<]+)</span>', html_text)
     if m:
         info.language = m.group(1)
 
-    # stars
     m = re.search(r'([\d,]+)\s*stars?', html_text, re.IGNORECASE)
     if m:
         info.stars = int(m.group(1).replace(",", ""))
@@ -125,7 +131,7 @@ def _crawl_pypi(url: str) -> SoftwareInfo:
 
     pkg = match.group(1)
     api_url = f"https://pypi.org/pypi/{pkg}/json"
-    raw = _fetch(api_url)
+    raw = _fetch(api_url, timeout=10)
     data = json.loads(raw)
     info_data = data.get("info", {})
 
@@ -152,7 +158,7 @@ def _crawl_npm(url: str) -> SoftwareInfo:
 
     pkg = match.group(1)
     api_url = f"https://registry.npmjs.org/{pkg}/latest"
-    raw = _fetch(api_url)
+    raw = _fetch(api_url, timeout=10)
     data = json.loads(raw)
 
     info = SoftwareInfo(
@@ -172,30 +178,26 @@ def _crawl_npm(url: str) -> SoftwareInfo:
 # ---- Generic web page ----
 
 def _crawl_generic(url: str) -> SoftwareInfo:
-    html_text = _fetch(url)
+    """通用网页：只抓前 16KB，通常足够覆盖 <head> 中的 meta 信息"""
+    html_text = _fetch(url, timeout=10, max_bytes=16384)
     info = SoftwareInfo(source_url=url, source_type="generic")
 
-    # Title
     m = re.search(r"<title[^>]*>(.*?)</title>", html_text, re.IGNORECASE | re.DOTALL)
     if m:
         info.name = re.sub(r"<[^>]+>", "", m.group(1)).strip()[:100]
 
-    # Meta description
     m = re.search(r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)["\']', html_text, re.IGNORECASE)
     if m:
         info.description = m.group(1).strip()
 
-    # Open Graph title
     m = re.search(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']', html_text, re.IGNORECASE)
     if m and not info.name:
         info.name = m.group(1).strip()
 
-    # Open Graph description
     m = re.search(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']', html_text, re.IGNORECASE)
     if m and not info.description:
         info.description = m.group(1).strip()
 
-    # Version patterns
     m = re.search(r'[Vv]ersion[\s:]+(\d+[.\d]*)', html_text)
     if m:
         info.version = m.group(1)
