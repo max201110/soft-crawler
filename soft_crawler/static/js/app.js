@@ -1,10 +1,22 @@
 /* soft-crawler — 前端逻辑 */
 
+// ---- Tab 切换 ----
+function switchTab(mode) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent.includes(mode === 'single' ? '单条' : '批量')));
+    document.getElementById('singleMode').classList.toggle('hidden', mode !== 'single');
+    document.getElementById('batchMode').classList.toggle('hidden', mode !== 'single');
+    document.getElementById('resultSection').classList.toggle('hidden', mode !== 'single');
+    document.getElementById('batchResultSection').classList.toggle('hidden', mode !== 'batch');
+}
+
+// ---- 工具函数 ----
 function detectType(url) {
-    const host = new URL(url, location.href).hostname.toLowerCase();
-    if (host.includes("github.com")) return "github";
-    if (host.includes("pypi.org")) return "pypi";
-    if (host.includes("npmjs.com")) return "npm";
+    try {
+        const host = new URL(url, location.href).hostname.toLowerCase();
+        if (host.includes("github.com")) return "github";
+        if (host.includes("pypi.org")) return "pypi";
+        if (host.includes("npmjs.com")) return "npm";
+    } catch {}
     return "generic";
 }
 
@@ -24,15 +36,23 @@ function showStatus(msg, type) {
     el.textContent = msg;
 }
 
+function normalizeUrl(url, type) {
+    if (url.startsWith("http")) return url;
+    switch (type) {
+        case "github": return "https://github.com/" + url.replace(/^\/+/, "");
+        case "pypi":   return "https://pypi.org/project/" + url.replace(/^\/+/, "");
+        case "npm":    return "https://www.npmjs.com/package/" + url.replace(/^\/+/, "");
+        default:      return "https://" + url;
+    }
+}
+
+// ---- 单条爬取 ----
 async function doCrawl() {
     const input = document.getElementById("urlInput");
     const typeSelect = document.getElementById("sourceType");
     const btn = document.getElementById("crawlBtn");
     let url = input.value.trim();
-    if (!url) {
-        showStatus("请输入 URL", "err");
-        return;
-    }
+    if (!url) { showStatus("请输入 URL", "err"); return; }
 
     const overrideType = typeSelect.value;
     if (overrideType !== "auto") {
@@ -52,12 +72,7 @@ async function doCrawl() {
             body: JSON.stringify({ url }),
         });
         const json = await res.json();
-
-        if (!json.ok) {
-            showStatus("错误: " + json.error, "err");
-            return;
-        }
-
+        if (!json.ok) { showStatus("错误: " + json.error, "err"); return; }
         renderResult(json.data);
         showStatus("爬取成功!", "ok");
         setTimeout(() => document.getElementById("status").className = "status", 3000);
@@ -69,16 +84,38 @@ async function doCrawl() {
     }
 }
 
-function normalizeUrl(url, type) {
-    if (url.startsWith("http")) return url;
-    switch (type) {
-        case "github": return "https://github.com/" + url.replace(/^\/+/, "");
-        case "pypi":   return "https://pypi.org/project/" + url.replace(/^\/+/, "");
-        case "npm":    return "https://www.npmjs.com/package/" + url.replace(/^\/+/, "");
-        default:      return "https://" + url;
+// ---- 批量爬取 ----
+async function doBatch() {
+    const ta = document.getElementById("batchInput");
+    const btn = document.getElementById("batchBtn");
+    const rawLines = ta.value.split("\n").map(l => l.trim()).filter(Boolean);
+    if (!rawLines.length) { showStatus("请输入至少一个 URL", "err"); return; }
+
+    const concurrency = parseInt(document.getElementById("concurrency").value, 10);
+    btn.disabled = true;
+    btn.textContent = "批量爬取中...";
+    showStatus(`正在并发爬取 ${rawLines.length} 个 URL（${concurrency} 并发）...`, "loading");
+
+    try {
+        const res = await fetch("/api/batch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ urls: rawLines, concurrency }),
+        });
+        const json = await res.json();
+        if (!json.ok) { showStatus("错误: " + json.error, "err"); return; }
+        renderBatchResults(json);
+        showStatus(`完成! 成功 ${json.success}/${json.total}，耗时 ${json.total_ms}ms`, "ok");
+        setTimeout(() => document.getElementById("status").className = "status", 5000);
+    } catch (e) {
+        showStatus("请求失败: " + e.message, "err");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "批量爬取";
     }
 }
 
+// ---- 渲染单条结果 ----
 function renderResult(d) {
     const section = document.getElementById("resultSection");
     const card = document.getElementById("resultCard");
@@ -139,7 +176,45 @@ function renderResult(d) {
     `;
 }
 
-// 回车触发搜索
+// ---- 渲染批量结果 ----
+function renderBatchResults(json) {
+    const section = document.getElementById("batchResultSection");
+    const list = document.getElementById("batchResults");
+    const summary = document.getElementById("batchSummary");
+    section.classList.remove("hidden");
+
+    summary.textContent = `${json.success}/${json.total} 成功 | ${json.total_ms}ms`;
+
+    list.innerHTML = json.results.map((r, i) => {
+        const d = r.data || {};
+        const tagsHtml = (d.topics || []).map(t => `<span class="tag">${esc(t)}</span>`).join("");
+        const statusIcon = r.ok ? "&#10003;" : "&#10007;";
+        const statusClass = r.ok ? "batch-ok" : "batch-err";
+
+        return `
+        <div class="batch-item ${statusClass}">
+            <div class="batch-header">
+                <span class="batch-idx">${i + 1}</span>
+                <span class="batch-status">${statusIcon}</span>
+                <span class="batch-name">${r.ok ? esc(d.name || r.url) : "失败"}</span>
+                <span class="badge ${badgeClass(d.source_type || 'generic')}">${d.source_type || '?'}</span>
+                <span class="batch-time">${r.elapsed_ms}ms</span>
+            </div>
+            <div class="batch-url">${esc(r.url)}</div>
+            ${r.ok ? `
+            <div class="batch-fields">
+                <span class="bf">${esc(d.description) || '—'}</span>
+                <span class="bf">&#9733; ${d.stars || 0}</span>
+                <span class="bf">${esc(d.language) || '—'}</span>
+                <span class="bf">${esc(d.version) || '—'}</span>
+                <span class="bf">${esc(d.license_str) || '—'}</span>
+                <div class="tags">${tagsHtml || '<span class="empty">无标签</span>'}</div>
+            </div>` : `<div class="batch-error">${esc(r.error)}</div>`}
+        </div>`;
+    }).join("");
+}
+
+// 回车触发
 document.getElementById("urlInput").addEventListener("keydown", e => {
     if (e.key === "Enter") doCrawl();
 });

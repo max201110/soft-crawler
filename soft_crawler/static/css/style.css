@@ -240,8 +240,170 @@ header h1 {
     white-space: nowrap;
 }
 
+/* ---- Tabs ---- */
+.tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 0;
+}
+
+.tab {
+    flex: 1;
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-sec);
+    cursor: pointer;
+    transition: all .2s;
+}
+
+.tab.active {
+    background: var(--surface);
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+}
+
+.tab:hover:not(.active) {
+    color: var(--text);
+}
+
+/* ---- 批量控件 ---- */
+textarea#batchInput {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: monospace;
+    resize: vertical;
+    outline: none;
+}
+
+textarea#batchInput:focus { border-color: var(--primary); }
+
+.batch-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.batch-controls label {
+    font-size: 14px;
+    color: var(--text-sec);
+}
+
+.batch-controls select {
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* ---- 批量结果 ---- */
+.batch-results {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+    margin-bottom: 24px;
+}
+
+.batch-results h2 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.batch-summary {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-sec);
+}
+
+.batch-item {
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.batch-ok { border-left: 3px solid var(--success); }
+.batch-err { border-left: 3px solid var(--error); }
+
+.batch-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.batch-idx {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: var(--primary);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.batch-status {
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.batch-ok .batch-status { color: var(--success); }
+.batch-err .batch-status { color: var(--error); }
+
+.batch-name {
+    font-weight: 600;
+    font-size: 14px;
+    flex: 1;
+}
+
+.batch-time {
+    font-size: 12px;
+    color: #94a3b8;
+    font-family: monospace;
+}
+
+.batch-url {
+    font-size: 12px;
+    color: var(--text-sec);
+    margin-bottom: 6px;
+    word-break: break-all;
+}
+
+.batch-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.bf {
+    font-size: 13px;
+    color: var(--text-sec);
+}
+
+.batch-error {
+    font-size: 13px;
+    color: var(--error);
+}
+
 /* ---- 响应式 ---- */
 @media (max-width: 600px) {
     .input-group { flex-direction: column; }
     .result-card { grid-template-columns: 1fr; }
+    .batch-header { flex-wrap: wrap; }
 }

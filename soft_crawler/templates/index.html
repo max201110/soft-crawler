@@ -13,9 +13,16 @@
             <p class="subtitle">输入软件地址，自动抓取项目信息</p>
         </header>
 
-        <section class="search-box">
+        <!-- Tab 切换 -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('single')">单条爬取</button>
+            <button class="tab" onclick="switchTab('batch')">批量并发爬取</button>
+        </div>
+
+        <!-- 单条模式 -->
+        <section id="singleMode" class="search-box">
             <div class="input-group">
-                <input type="text" id="urlInput" placeholder="输入 URL，如 https://github.com/owner/repo 或 https://pypi.org/project/xxx" />
+                <input type="text" id="urlInput" placeholder="输入 URL，如 https://github.com/owner/repo" />
                 <select id="sourceType">
                     <option value="auto">自动检测</option>
                     <option value="github">GitHub</option>
@@ -28,16 +35,34 @@
             <p class="hint">支持 GitHub 仓库、PyPI 包、NPM 包、任意软件介绍页面</p>
         </section>
 
+        <!-- 批量模式 -->
+        <section id="batchMode" class="search-box hidden">
+            <textarea id="batchInput" rows="6" placeholder="每行一个 URL，例如：&#10;https://github.com/microsoft/vscode&#10;https://pypi.org/project/requests&#10;https://www.npmjs.com/package/lodash"></textarea>
+            <div class="batch-controls">
+                <label>并发数:
+                    <select id="concurrency">
+                        <option value="2">2</option>
+                        <option value="4" selected>4</option>
+                        <option value="8">8</option>
+                    </select>
+                </label>
+                <button id="batchBtn" onclick="doBatch()">批量爬取</button>
+            </div>
+            <p class="hint">最多 8 并发，自动去重，保持输入顺序显示结果</p>
+        </section>
+
         <div id="status" class="status"></div>
 
+        <!-- 单条结果 -->
         <section id="resultSection" class="result-section hidden">
             <h2>&#x1F4CB; 爬取结果</h2>
             <div id="resultCard" class="result-card"></div>
         </section>
 
-        <section id="historySection" class="history-section hidden">
-            <h2>&#x1F4D0; 历史记录</h2>
-            <div id="historyList" class="history-list"></div>
+        <!-- 批量结果 -->
+        <section id="batchResultSection" class="batch-results hidden">
+            <h2>&#x1F4CB; 批量结果 <span id="batchSummary" class="batch-summary"></span></h2>
+            <div id="batchResults" class="batch-results-list"></div>
         </section>
     </div>
 

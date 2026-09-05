@@ -102,6 +102,10 @@ def _crawl_github_html(url: str) -> SoftwareInfo:
     html_text = _fetch(url, timeout=10, max_bytes=8192)
     info = SoftwareInfo(source_url=url, source_type="github")
 
+    # Detect rate limit / error pages
+    if "rate limit" in html_text.lower() or "verify your account" in html_text.lower():
+        raise CrawlError("GitHub 访问受限（IP 频率限制），请稍后再试")
+
     m = re.search(r'<title>([^<]+)</title>', html_text)
     if m:
         title = m.group(1).replace("GitHub", "").strip(" ·:-")
@@ -209,6 +213,8 @@ def _crawl_generic(url: str) -> SoftwareInfo:
 
 def crawl(url: str) -> SoftwareInfo:
     """根据 URL 类型自动选择爬取策略"""
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
     stype = _detect_type(url)
     if stype == "github":
         return _crawl_github(url)
