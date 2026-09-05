@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>软件信息爬虫</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>&#x1F41D; 软件信息爬虫</h1>
+            <p class="subtitle">输入软件地址，自动抓取项目信息</p>
+        </header>
+
+        <section class="search-box">
+            <div class="input-group">
+                <input type="text" id="urlInput" placeholder="输入 URL，如 https://github.com/owner/repo 或 https://pypi.org/project/xxx" />
+                <select id="sourceType">
+                    <option value="auto">自动检测</option>
+                    <option value="github">GitHub</option>
+                    <option value="pypi">PyPI</option>
+                    <option value="npm">NPM</option>
+                    <option value="generic">通用网页</option>
+                </select>
+                <button id="crawlBtn" onclick="doCrawl()">开始爬取</button>
+            </div>
+            <p class="hint">支持 GitHub 仓库、PyPI 包、NPM 包、任意软件介绍页面</p>
+        </section>
+
+        <div id="status" class="status"></div>
+
+        <section id="resultSection" class="result-section hidden">
+            <h2>&#x1F4CB; 爬取结果</h2>
+            <div id="resultCard" class="result-card"></div>
+        </section>
+
+        <section id="historySection" class="history-section hidden">
+            <h2>&#x1F4D0; 历史记录</h2>
+            <div id="historyList" class="history-list"></div>
+        </section>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
